@@ -1,0 +1,20 @@
+# Secrets — NEVER commit these
+.env
+app/.env
+streamlit_dashboard/.env
+.streamlit/secrets.toml
+streamlit_dashboard/.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+test_local.py
+app/test_local.py
+app/main_backup.py
+# OS
+.DS_Store
+Thumbs.db
