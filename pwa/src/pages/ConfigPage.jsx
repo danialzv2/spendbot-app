@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getConfig, saveConfig } from '../api'
+import configureImg from '../components/configure_image.png'
 
 export default function ConfigPage({ chatId, onUnauth }) {
   const [salary, setSalary]           = useState('')
@@ -12,7 +13,6 @@ export default function ConfigPage({ chatId, onUnauth }) {
   const [toast, setToast]             = useState(null)
   const [error, setError]             = useState(null)
 
-  // ── Load from backend ─────────────────────────────────────────────────────
   const loadConfig = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -31,7 +31,6 @@ export default function ConfigPage({ chatId, onUnauth }) {
 
   useEffect(() => { loadConfig() }, [loadConfig])
 
-  // ── Save to backend ───────────────────────────────────────────────────────
   async function handleSave() {
     setSaving(true)
     try {
@@ -51,7 +50,6 @@ export default function ConfigPage({ chatId, onUnauth }) {
     setTimeout(() => setToast(null), 2500)
   }
 
-  // ── Commitment helpers ────────────────────────────────────────────────────
   function addCommitment() {
     if (!newLabel.trim() || !newAmount) return
     setCommitments(prev => [...prev, { label: newLabel.trim(), amount: parseFloat(newAmount) }])
@@ -72,11 +70,10 @@ export default function ConfigPage({ chatId, onUnauth }) {
     setDirty(true)
   }
 
-  // ── Calculations ──────────────────────────────────────────────────────────
-  const sal          = parseFloat(salary) || 0
-  const totalCommit  = commitments.reduce((s, c) => s + (parseFloat(c.amount) || 0), 0)
-  const disposable   = sal - totalCommit
-  const commitRatio  = sal > 0 ? Math.min((totalCommit / sal) * 100, 100) : 0
+  const sal         = parseFloat(salary) || 0
+  const totalCommit = commitments.reduce((s, c) => s + (parseFloat(c.amount) || 0), 0)
+  const disposable  = sal - totalCommit
+  const commitRatio = sal > 0 ? Math.min((totalCommit / sal) * 100, 100) : 0
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', fontFamily: 'var(--mono)', fontSize: '0.75rem' }}>
@@ -94,26 +91,39 @@ export default function ConfigPage({ chatId, onUnauth }) {
   return (
     <div style={{ height: '100%', overflowY: 'auto', animation: 'fadeIn 0.2s ease' }}>
 
-      {/* ── Header ── */}
+      {/* ── Centered header ── */}
       <div style={{
-        padding: '0.85rem 1.1rem', borderBottom: '1px solid rgba(255,255,255,0.04)',
-        display: 'flex', alignItems: 'center', gap: '0.6rem',
-        background: 'rgba(8,8,8,0.9)', backdropFilter: 'blur(20px)',
+        padding: '0.85rem 1.1rem',
+        borderBottom: '1px solid rgba(255,255,255,0.04)',
+        background: 'rgba(8,8,8,0.9)',
+        backdropFilter: 'blur(20px)',
         position: 'sticky', top: 0, zIndex: 10,
+        display: 'grid',
+        gridTemplateColumns: '1fr auto 1fr',
+        alignItems: 'center',
       }}>
-        <span style={{ fontSize: '1.1rem' }}>⚙️</span>
-        <span style={{ fontWeight: 700, fontSize: '0.95rem', letterSpacing: '-0.2px' }}>Configure</span>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        {/* Left — spacer */}
+        <div />
+
+        {/* Center — title */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <img src={configureImg} alt="" style={{ height: 20, objectFit: 'contain', filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
+          <span style={{ fontWeight: 700, fontSize: '0.95rem', letterSpacing: '-0.2px' }}>Configure</span>
+        </div>
+
+        {/* Right — save button */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
           {dirty && (
-            <span style={{ fontFamily: 'var(--mono)', fontSize: '0.58rem', color: 'var(--warning)' }}>
-              unsaved
-            </span>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: '0.58rem', color: 'var(--warning)' }}>unsaved</span>
           )}
           <button
             className="btn-icon"
             onClick={handleSave}
             disabled={saving || !dirty}
-            style={{ opacity: !dirty || saving ? 0.4 : 1, color: dirty ? 'var(--accent)' : undefined }}
+            style={{
+              opacity: !dirty || saving ? 0.4 : 1,
+              color: dirty ? 'var(--accent)' : undefined,
+            }}
           >
             {saving ? '···' : '↑ Save'}
           </button>
@@ -122,47 +132,33 @@ export default function ConfigPage({ chatId, onUnauth }) {
 
       <div style={{ padding: '1.1rem', display: 'flex', flexDirection: 'column', gap: '1.6rem', paddingBottom: '3rem' }}>
 
-        {/* ── Net Income Summary ── */}
+        {/* Net Income Summary */}
         {sal > 0 && (
-          <div className="glass-panel" style={{ padding: '1.2rem' }}>
-            <div style={{ fontFamily: 'var(--mono)', fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1.8px', marginBottom: '0.9rem' }}>
-              Monthly Summary
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <SummaryRow label="Salary" value={sal} color="var(--positive)" prefix="+" />
-              <SummaryRow label="Commitments" value={totalCommit} color="var(--negative)" prefix="−" />
-              <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '0.3rem 0' }} />
-              <SummaryRow
-                label="Disposable"
-                value={disposable}
-                color={disposable >= 0 ? 'var(--accent)' : 'var(--negative)'}
-                bold
-              />
-            </div>
-
-            {/* Commitment ratio bar */}
-            {sal > 0 && (
-              <div style={{ marginTop: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--mono)', fontSize: '0.6rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
-                  <span>Fixed commitments</span>
-                  <span>{commitRatio.toFixed(0)}% of salary</span>
-                </div>
-                <div className="pace-track">
-                  <div
-                    className="pace-fill"
-                    style={{
-                      width: `${commitRatio}%`,
-                      background: commitRatio > 70 ? 'var(--negative)' : commitRatio > 50 ? 'var(--warning)' : 'var(--positive)',
-                    }}
-                  />
-                </div>
+          <div>
+            <div className="section-head">Monthly Summary</div>
+            <div className="glass-panel" style={{ padding: '1.2rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <SummaryRow label="Salary" value={sal} color="var(--positive)" prefix="+" />
+                <SummaryRow label="Commitments" value={totalCommit} color="var(--negative)" prefix="−" />
+                <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '0.3rem 0' }} />
+                <SummaryRow label="Disposable" value={disposable} color={disposable >= 0 ? 'var(--accent)' : 'var(--negative)'} bold />
               </div>
-            )}
+              {sal > 0 && (
+                <div style={{ marginTop: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--mono)', fontSize: '0.6rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
+                    <span>Fixed commitments</span>
+                    <span>{commitRatio.toFixed(0)}% of salary</span>
+                  </div>
+                  <div className="pace-track">
+                    <div className="pace-fill" style={{ width: `${commitRatio}%`, background: commitRatio > 70 ? 'var(--negative)' : commitRatio > 50 ? 'var(--warning)' : 'var(--positive)' }} />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {/* ── Salary ── */}
+        {/* Salary */}
         <div>
           <div className="section-head">Monthly Salary</div>
           <div className="glass-panel" style={{ padding: '1rem 1.1rem' }}>
@@ -179,7 +175,7 @@ export default function ConfigPage({ chatId, onUnauth }) {
           </div>
         </div>
 
-        {/* ── Commitments ── */}
+        {/* Commitments */}
         <div>
           <div className="section-head">
             Monthly Commitments
@@ -188,7 +184,6 @@ export default function ConfigPage({ chatId, onUnauth }) {
             </span>
           </div>
 
-          {/* Commitments list */}
           {commitments.length > 0 && (
             <div className="glass-panel" style={{ marginBottom: '0.75rem' }}>
               {commitments.map((c, i) => (
@@ -197,15 +192,12 @@ export default function ConfigPage({ chatId, onUnauth }) {
                   padding: '0.7rem 1rem',
                   borderBottom: i < commitments.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none',
                 }}>
-                  {/* Label */}
                   <input
                     value={c.label}
                     onChange={e => updateCommitment(i, 'label', e.target.value)}
                     placeholder="Label"
                     style={{ ...inputStyle, flex: 2, fontSize: '0.85rem' }}
                   />
-
-                  {/* Amount */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flex: 1 }}>
                     <span style={{ fontFamily: 'var(--mono)', fontSize: '0.72rem', color: 'var(--text-muted)', flexShrink: 0 }}>RM</span>
                     <input
@@ -216,15 +208,12 @@ export default function ConfigPage({ chatId, onUnauth }) {
                       style={{ ...inputStyle, flex: 1, fontSize: '0.85rem' }}
                     />
                   </div>
-
-                  {/* Remove */}
                   <button
                     onClick={() => removeCommitment(i)}
                     style={{
                       background: 'none', border: 'none', cursor: 'pointer',
-                      color: 'var(--text-muted)', fontSize: '1rem', padding: '0.2rem',
-                      flexShrink: 0, lineHeight: 1,
-                      transition: 'color 0.15s',
+                      color: 'var(--text-muted)', fontSize: '1.1rem', padding: '0.2rem',
+                      flexShrink: 0, lineHeight: 1, transition: 'color 0.15s',
                     }}
                     onMouseEnter={e => e.target.style.color = 'var(--negative)'}
                     onMouseLeave={e => e.target.style.color = 'var(--text-muted)'}
@@ -236,7 +225,6 @@ export default function ConfigPage({ chatId, onUnauth }) {
             </div>
           )}
 
-          {/* Add new commitment */}
           <div className="glass-panel" style={{ padding: '0.9rem 1rem' }}>
             <div style={{ fontFamily: 'var(--mono)', fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.65rem' }}>
               Add Commitment
@@ -277,7 +265,6 @@ export default function ConfigPage({ chatId, onUnauth }) {
           </div>
         </div>
 
-        {/* ── Common commitments hint ── */}
         <div style={{ fontFamily: 'var(--mono)', fontSize: '0.62rem', color: 'var(--text-muted)', lineHeight: 1.8 }}>
           Common commitments: Rent · Car loan · Insurance · Phone bill ·<br />
           Internet · Netflix · Gym · Savings transfer · PTPTN
@@ -285,7 +272,7 @@ export default function ConfigPage({ chatId, onUnauth }) {
 
       </div>
 
-      {/* ── Toast ── */}
+      {/* Toast */}
       {toast && (
         <div style={{
           position: 'fixed', bottom: '5rem', left: '50%', transform: 'translateX(-50%)',
@@ -295,8 +282,7 @@ export default function ConfigPage({ chatId, onUnauth }) {
           fontFamily: 'var(--mono)', fontSize: '0.75rem',
           color: toast.isError ? 'var(--negative)' : 'var(--accent)',
           backdropFilter: 'blur(20px)', zIndex: 100,
-          animation: 'fadeIn 0.2s ease',
-          whiteSpace: 'nowrap',
+          animation: 'fadeIn 0.2s ease', whiteSpace: 'nowrap',
         }}>
           {toast.msg}
         </div>
@@ -304,8 +290,6 @@ export default function ConfigPage({ chatId, onUnauth }) {
     </div>
   )
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function SummaryRow({ label, value, color, prefix = '', bold }) {
   return (
@@ -323,12 +307,8 @@ function SummaryRow({ label, value, color, prefix = '', bold }) {
 const inputStyle = {
   background: 'rgba(255,255,255,0.04)',
   border: '1px solid rgba(255,255,255,0.07)',
-  borderRadius: 8,
-  padding: '0.55rem 0.75rem',
-  color: 'var(--text-primary)',
-  fontSize: '0.9rem',
-  outline: 'none',
-  width: '100%',
-  transition: 'border-color 0.15s',
-  fontFamily: 'inherit',
+  borderRadius: 8, padding: '0.55rem 0.75rem',
+  color: 'var(--text-primary)', fontSize: '0.9rem',
+  outline: 'none', width: '100%',
+  transition: 'border-color 0.15s', fontFamily: 'inherit',
 }

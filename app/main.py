@@ -5,14 +5,15 @@ from datetime import datetime, timedelta
 from typing import List
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, UploadFile, File, Header, HTTPException, Depends
+from fastapi import FastAPI, UploadFile, File, Header, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from sheets import (
     init_sheet, init_config_sheet,
-    insert_spending, query_summary, get_financial_context,
+    insert_spending, delete_transaction,
+    query_summary, get_financial_context,
     get_user_config, save_user_config,
 )
 from gemini import parse_message
@@ -94,10 +95,8 @@ async def upload_receipt(
         image_bytes = await file.read()
         mime_type   = file.content_type or "image/jpeg"
         parsed      = await parse_receipt(image_bytes, mime_type)
-
         if not parsed.get("amount"):
             return {"success": False, "reply": "⚠️ Couldn't read the total. Try a clearer photo or type it manually."}
-
         timestamp = insert_spending(
             sheet,
             chat_id  = chat_id,
@@ -110,12 +109,23 @@ async def upload_receipt(
     except Exception as e:
         return {"success": False, "reply": f"⚠️ Receipt error: {str(e)}"}
 
+# ── Delete Transaction (protected) ────────────────────────────────────────────
+@app.delete("/transaction")
+async def remove_transaction(
+    chat_id:   str = Query(...),
+    timestamp: str = Query(...),
+    _: None = Depends(verify_pin),
+):
+    """Delete a single spending row from Sheet1 matched by chat_id + timestamp."""
+    deleted = delete_transaction(sheet, chat_id=chat_id, timestamp=timestamp)
+    if deleted:
+        return {"ok": True, "message": "Transaction deleted"}
+    raise HTTPException(status_code=404, detail="Transaction not found")
+
 # ── Config GET (protected) ────────────────────────────────────────────────────
 @app.get("/config")
 async def get_config(chat_id: str, _: None = Depends(verify_pin)):
-    """Return salary and commitments for a user from Sheet2."""
-    result = get_user_config(config_sheet, chat_id)
-    return result
+    return get_user_config(config_sheet, chat_id)
 
 # ── Config POST (protected) ───────────────────────────────────────────────────
 @app.post("/config")
@@ -124,7 +134,6 @@ async def save_config(
     body: ConfigRequest,
     _: None = Depends(verify_pin),
 ):
-    """Overwrite all config rows for a user in Sheet2."""
     save_user_config(
         config_sheet,
         chat_id     = chat_id,

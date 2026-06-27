@@ -46,6 +46,19 @@ export async function uploadReceipt(file, chatId) {
   return res.json()
 }
 
+// ── Delete transaction ────────────────────────────────────────────────────────
+export async function deleteTransaction(chatId, timestamp) {
+  const params = new URLSearchParams({ chat_id: chatId, timestamp })
+  const res = await fetch(`${API_URL}/transaction?${params}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+  if (res.status === 401) throw new Error('UNAUTHORIZED')
+  if (res.status === 404) throw new Error('NOT_FOUND')
+  if (!res.ok) throw new Error(`API error ${res.status}`)
+  return res.json()
+}
+
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 export async function fetchDashboard(chatId) {
   const res = await fetch(`${API_URL}/dashboard?chat_id=${chatId}`, {
@@ -63,7 +76,7 @@ export async function getConfig(chatId) {
   })
   if (res.status === 401) throw new Error('UNAUTHORIZED')
   if (!res.ok) throw new Error(`API error ${res.status}`)
-  return res.json()  // { salary: number, commitments: [{label, amount}] }
+  return res.json()
 }
 
 export async function saveConfig(chatId, salary, commitments) {
