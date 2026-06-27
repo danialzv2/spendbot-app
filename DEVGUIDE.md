@@ -5,6 +5,7 @@
 
 2. Host Web
 - cd pwa
+- npm install (one time only)
 - npm run dev
 
 # Run Cloud

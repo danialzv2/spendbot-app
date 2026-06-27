@@ -2,26 +2,34 @@ import json
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+from typing import List
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Header, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from sheets import init_sheet, insert_spending, query_summary, get_financial_context
+from sheets import (
+    init_sheet, init_config_sheet,
+    insert_spending, query_summary, get_financial_context,
+    get_user_config, save_user_config,
+)
 from gemini import parse_message
 from advisor import get_advice
 from receipt import parse_receipt
 from formatters import format_log_reply, format_receipt_reply, format_summary, HELP_TEXT
+from config import APP_PIN
 
 # ── App lifecycle ─────────────────────────────────────────────────────────────
-sheet = None
+sheet        = None
+config_sheet = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global sheet
-    sheet = init_sheet()
+    global sheet, config_sheet
+    sheet        = init_sheet()
+    config_sheet = init_config_sheet()
     yield
 
 app = FastAPI(lifespan=lifespan)
@@ -29,15 +37,30 @@ app = FastAPI(lifespan=lifespan)
 # ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten to your Vercel URL in production
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+async def verify_pin(authorization: str = Header(default=None)):
+    if not APP_PIN:
+        return
+    if authorization != f"Bearer {APP_PIN}":
+        raise HTTPException(status_code=401, detail="Invalid PIN")
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
 class ChatRequest(BaseModel):
     message:  str
     chat_id:  str
+
+class CommitmentItem(BaseModel):
+    label:  str
+    amount: float
+
+class ConfigRequest(BaseModel):
+    salary:      float = 0.0
+    commitments: List[CommitmentItem] = []
 
 # ── Health check ──────────────────────────────────────────────────────────────
 @app.get("/")
@@ -45,27 +68,35 @@ class ChatRequest(BaseModel):
 async def health():
     return {"status": "SpendBot is running 🚀"}
 
-# ── PWA Chat ──────────────────────────────────────────────────────────────────
+# ── Auth endpoint ─────────────────────────────────────────────────────────────
+@app.post("/auth")
+async def auth(authorization: str = Header(default=None)):
+    if not APP_PIN:
+        return {"ok": True}
+    if authorization != f"Bearer {APP_PIN}":
+        raise HTTPException(status_code=401, detail="Invalid PIN")
+    return {"ok": True}
+
+# ── Chat (protected) ──────────────────────────────────────────────────────────
 @app.post("/chat")
-async def chat(req: ChatRequest):
-    """Process a text message and return a reply."""
+async def chat(req: ChatRequest, _: None = Depends(verify_pin)):
     reply = await _process_text(req.message, req.chat_id)
     return {"reply": reply}
 
-# ── PWA Receipt Upload ────────────────────────────────────────────────────────
+# ── Receipt Upload (protected) ────────────────────────────────────────────────
 @app.post("/receipt")
-async def upload_receipt(chat_id: str, file: UploadFile = File(...)):
-    """Accept a receipt image from the PWA, parse it with Gemini, log to Sheets."""
+async def upload_receipt(
+    chat_id: str,
+    file: UploadFile = File(...),
+    _: None = Depends(verify_pin),
+):
     try:
         image_bytes = await file.read()
         mime_type   = file.content_type or "image/jpeg"
         parsed      = await parse_receipt(image_bytes, mime_type)
 
         if not parsed.get("amount"):
-            return {
-                "success": False,
-                "reply": "⚠️ Couldn't read the total from this receipt. Try a clearer photo or type it manually: rm25 food mcdonalds",
-            }
+            return {"success": False, "reply": "⚠️ Couldn't read the total. Try a clearer photo or type it manually."}
 
         timestamp = insert_spending(
             sheet,
@@ -75,18 +106,36 @@ async def upload_receipt(chat_id: str, file: UploadFile = File(...)):
             place    = parsed.get("place") or "Unknown",
             note     = parsed.get("note") or "",
         )
-        return {
-            "success": True,
-            "reply":   format_receipt_reply(parsed, timestamp),
-            "data":    parsed,
-        }
+        return {"success": True, "reply": format_receipt_reply(parsed, timestamp), "data": parsed}
     except Exception as e:
         return {"success": False, "reply": f"⚠️ Receipt error: {str(e)}"}
 
-# ── PWA Dashboard ─────────────────────────────────────────────────────────────
+# ── Config GET (protected) ────────────────────────────────────────────────────
+@app.get("/config")
+async def get_config(chat_id: str, _: None = Depends(verify_pin)):
+    """Return salary and commitments for a user from Sheet2."""
+    result = get_user_config(config_sheet, chat_id)
+    return result
+
+# ── Config POST (protected) ───────────────────────────────────────────────────
+@app.post("/config")
+async def save_config(
+    chat_id: str,
+    body: ConfigRequest,
+    _: None = Depends(verify_pin),
+):
+    """Overwrite all config rows for a user in Sheet2."""
+    save_user_config(
+        config_sheet,
+        chat_id     = chat_id,
+        salary      = body.salary,
+        commitments = [{"label": c.label, "amount": c.amount} for c in body.commitments],
+    )
+    return {"ok": True}
+
+# ── Dashboard (protected) ─────────────────────────────────────────────────────
 @app.get("/dashboard")
-async def get_dashboard(chat_id: str):
-    """Return all spending data structured for the PWA dashboard."""
+async def get_dashboard(chat_id: str, _: None = Depends(verify_pin)):
     MY_TZ    = ZoneInfo("Asia/Kuala_Lumpur")
     now      = datetime.now(MY_TZ)
     today    = now.date()
@@ -118,15 +167,12 @@ async def get_dashboard(chat_id: str):
     if not rows:
         return {"overview": {}, "months": [], "all_time": {"by_category": {}, "transactions": [], "total": 0}}
 
-    def sum_rows(rs):
-        return sum(r["amount"] for r in rs)
-
+    def sum_rows(rs):   return sum(r["amount"] for r in rs)
     def by_cat(rs):
         d = defaultdict(float)
         for r in rs:
             d[r["category"]] = round(d[r["category"]] + r["amount"], 2)
         return dict(sorted(d.items(), key=lambda x: x[1], reverse=True))
-
     def to_tx(rs):
         return sorted([
             {"timestamp": r["timestamp"], "amount": r["amount"],
@@ -140,10 +186,10 @@ async def get_dashboard(chat_id: str):
     this_month_rows  = [r for r in rows if r["month"] == this_month]
     last_month_rows  = [r for r in rows if r["month"] == last_month]
 
-    days_so_far  = max((today - datetime.strptime(this_month + "-01", "%Y-%m-%d").date()).days + 1, 1)
-    spend_this   = sum_rows(this_month_rows)
-    cats_this    = by_cat(this_month_rows)
-    top_cat      = max(cats_this, key=cats_this.get) if cats_this else "—"
+    days_so_far = max((today - datetime.strptime(this_month + "-01", "%Y-%m-%d").date()).days + 1, 1)
+    spend_this  = sum_rows(this_month_rows)
+    cats_this   = by_cat(this_month_rows)
+    top_cat     = max(cats_this, key=cats_this.get) if cats_this else "—"
 
     overview = {
         "spend_today":          round(sum_rows(today_rows), 2),
@@ -182,7 +228,7 @@ async def get_dashboard(chat_id: str):
 
     return {"overview": overview, "months": months_out, "all_time": all_time}
 
-# ── Shared text processing ────────────────────────────────────────────────────
+# ── Text processing ───────────────────────────────────────────────────────────
 async def _process_text(text: str, chat_id) -> str:
     try:
         parsed = await parse_message(text)
@@ -201,10 +247,8 @@ async def _process_text(text: str, chat_id) -> str:
 
         elif intent == "summary_today":
             return format_summary(query_summary(sheet, chat_id, "today"))
-
         elif intent == "summary_week":
             return format_summary(query_summary(sheet, chat_id, "week"))
-
         elif intent == "summary_month":
             return format_summary(query_summary(sheet, chat_id, "month"))
 
