@@ -1,5 +1,7 @@
 # Secrets — NEVER commit these
 .env
+pwa/.env.local
+pwa/.env
 app/.env
 streamlit_dashboard/.env
 .streamlit/secrets.toml
@@ -18,3 +20,4 @@ app/main_backup.py
 # OS
 .DS_Store
 Thumbs.db
+pwa/node_modules

@@ -1,0 +1,8 @@
+{
+  "buildCommand": "cd pwa && npm install && npm run build",
+  "outputDirectory": "pwa/dist",
+  "framework": null,
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
