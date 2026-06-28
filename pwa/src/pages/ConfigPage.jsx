@@ -91,27 +91,20 @@ export default function ConfigPage({ chatId, onUnauth }) {
   return (
     <div style={{ height: '100%', overflowY: 'auto', animation: 'fadeIn 0.2s ease' }}>
 
-      {/* ── Centered header ── */}
+      {/* ── Header — centered ── */}
       <div style={{
         padding: '0.85rem 1.1rem',
         borderBottom: '1px solid rgba(255,255,255,0.04)',
         background: 'rgba(8,8,8,0.9)',
         backdropFilter: 'blur(20px)',
         position: 'sticky', top: 0, zIndex: 10,
-        display: 'grid',
-        gridTemplateColumns: '1fr auto 1fr',
-        alignItems: 'center',
+        display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center',
       }}>
-        {/* Left — spacer */}
         <div />
-
-        {/* Center — title */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <img src={configureImg} alt="" style={{ height: 20, objectFit: 'contain', filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
           <span style={{ fontWeight: 700, fontSize: '0.95rem', letterSpacing: '-0.2px' }}>Configure</span>
         </div>
-
-        {/* Right — save button */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
           {dirty && (
             <span style={{ fontFamily: 'var(--mono)', fontSize: '0.58rem', color: 'var(--warning)' }}>unsaved</span>
@@ -120,10 +113,7 @@ export default function ConfigPage({ chatId, onUnauth }) {
             className="btn-icon"
             onClick={handleSave}
             disabled={saving || !dirty}
-            style={{
-              opacity: !dirty || saving ? 0.4 : 1,
-              color: dirty ? 'var(--accent)' : undefined,
-            }}
+            style={{ opacity: !dirty || saving ? 0.4 : 1, color: dirty ? 'var(--accent)' : undefined }}
           >
             {saving ? '···' : '↑ Save'}
           </button>
@@ -132,33 +122,37 @@ export default function ConfigPage({ chatId, onUnauth }) {
 
       <div style={{ padding: '1.1rem', display: 'flex', flexDirection: 'column', gap: '1.6rem', paddingBottom: '3rem' }}>
 
-        {/* Net Income Summary */}
+        {/* ── Monthly Summary ── */}
         {sal > 0 && (
           <div>
             <div className="section-head">Monthly Summary</div>
-            <div className="glass-panel" style={{ padding: '1.2rem' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div className="glass-panel" style={{ padding: '1.1rem 1.2rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.9rem' }}>
                 <SummaryRow label="Salary" value={sal} color="var(--positive)" prefix="+" />
                 <SummaryRow label="Commitments" value={totalCommit} color="var(--negative)" prefix="−" />
-                <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '0.3rem 0' }} />
+                <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '0.2rem 0' }} />
                 <SummaryRow label="Disposable" value={disposable} color={disposable >= 0 ? 'var(--accent)' : 'var(--negative)'} bold />
               </div>
-              {sal > 0 && (
-                <div style={{ marginTop: '1rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--mono)', fontSize: '0.6rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
-                    <span>Fixed commitments</span>
-                    <span>{commitRatio.toFixed(0)}% of salary</span>
-                  </div>
-                  <div className="pace-track">
-                    <div className="pace-fill" style={{ width: `${commitRatio}%`, background: commitRatio > 70 ? 'var(--negative)' : commitRatio > 50 ? 'var(--warning)' : 'var(--positive)' }} />
-                  </div>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Fixed commitments</span>
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                    {commitRatio.toFixed(0)}% of salary
+                  </span>
                 </div>
-              )}
+                <div className="pace-track">
+                  <div className="pace-fill" style={{
+                    width: `${commitRatio}%`,
+                    background: commitRatio > 70 ? 'var(--negative)' : commitRatio > 50 ? 'var(--warning)' : 'var(--positive)',
+                  }} />
+                </div>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Salary */}
+        {/* ── Monthly Salary ── */}
         <div>
           <div className="section-head">Monthly Salary</div>
           <div className="glass-panel" style={{ padding: '1rem 1.1rem' }}>
@@ -175,15 +169,16 @@ export default function ConfigPage({ chatId, onUnauth }) {
           </div>
         </div>
 
-        {/* Commitments */}
+        {/* ── Monthly Commitments ── */}
         <div>
           <div className="section-head">
             Monthly Commitments
-            <span style={{ float: 'right', color: 'var(--text-secondary)', fontWeight: 400 }}>
+            <span style={{ float: 'right', color: 'var(--text-secondary)', fontWeight: 400, fontSize: '0.78rem' }}>
               {commitments.length} item{commitments.length !== 1 ? 's' : ''}
             </span>
           </div>
 
+          {/* List */}
           {commitments.length > 0 && (
             <div className="glass-panel" style={{ marginBottom: '0.75rem' }}>
               {commitments.map((c, i) => (
@@ -225,8 +220,9 @@ export default function ConfigPage({ chatId, onUnauth }) {
             </div>
           )}
 
+          {/* Add new */}
           <div className="glass-panel" style={{ padding: '0.9rem 1rem' }}>
-            <div style={{ fontFamily: 'var(--mono)', fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.65rem' }}>
+            <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#c0c0c0', marginBottom: '0.65rem' }}>
               Add Commitment
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -265,14 +261,15 @@ export default function ConfigPage({ chatId, onUnauth }) {
           </div>
         </div>
 
-        <div style={{ fontFamily: 'var(--mono)', fontSize: '0.62rem', color: 'var(--text-muted)', lineHeight: 1.8 }}>
+        {/* ── Hint ── */}
+        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.8 }}>
           Common commitments: Rent · Car loan · Insurance · Phone bill ·<br />
           Internet · Netflix · Gym · Savings transfer · PTPTN
         </div>
 
       </div>
 
-      {/* Toast */}
+      {/* ── Toast ── */}
       {toast && (
         <div style={{
           position: 'fixed', bottom: '5rem', left: '50%', transform: 'translateX(-50%)',
@@ -294,10 +291,10 @@ export default function ConfigPage({ chatId, onUnauth }) {
 function SummaryRow({ label, value, color, prefix = '', bold }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-      <span style={{ fontSize: bold ? '0.9rem' : '0.82rem', color: bold ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: bold ? 600 : 400 }}>
+      <span style={{ fontSize: bold ? '0.88rem' : '0.82rem', color: bold ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: bold ? 600 : 400 }}>
         {label}
       </span>
-      <span style={{ fontFamily: 'var(--mono)', fontSize: bold ? '1rem' : '0.85rem', fontWeight: bold ? 700 : 500, color }}>
+      <span style={{ fontFamily: 'var(--mono)', fontSize: bold ? '0.95rem' : '0.82rem', fontWeight: bold ? 700 : 500, color }}>
         {prefix} RM {Math.abs(value).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
       </span>
     </div>
@@ -307,8 +304,12 @@ function SummaryRow({ label, value, color, prefix = '', bold }) {
 const inputStyle = {
   background: 'rgba(255,255,255,0.04)',
   border: '1px solid rgba(255,255,255,0.07)',
-  borderRadius: 8, padding: '0.55rem 0.75rem',
-  color: 'var(--text-primary)', fontSize: '0.9rem',
-  outline: 'none', width: '100%',
-  transition: 'border-color 0.15s', fontFamily: 'inherit',
+  borderRadius: 8,
+  padding: '0.55rem 0.75rem',
+  color: 'var(--text-primary)',
+  fontSize: '0.9rem',
+  outline: 'none',
+  width: '100%',
+  transition: 'border-color 0.15s',
+  fontFamily: 'inherit',
 }

@@ -1,4 +1,5 @@
 import json
+import calendar
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -7,7 +8,6 @@ from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, UploadFile, File, Header, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from sheets import (
@@ -50,6 +50,12 @@ async def verify_pin(authorization: str = Header(default=None)):
     if authorization != f"Bearer {APP_PIN}":
         raise HTTPException(status_code=401, detail="Invalid PIN")
 
+# ── Valid categories ──────────────────────────────────────────────────────────
+VALID_CATEGORIES = {
+    "Food", "Drinks", "Groceries", "Clothing",
+    "Transport", "Entertainment", "Health", "Bills", "Other",
+}
+
 # ── Pydantic models ───────────────────────────────────────────────────────────
 class ChatRequest(BaseModel):
     message:  str
@@ -62,6 +68,13 @@ class CommitmentItem(BaseModel):
 class ConfigRequest(BaseModel):
     salary:      float = 0.0
     commitments: List[CommitmentItem] = []
+
+class TransactionRequest(BaseModel):
+    chat_id:  str
+    amount:   float
+    category: str
+    place:    str = "Unknown"
+    note:     str = ""
 
 # ── Health check ──────────────────────────────────────────────────────────────
 @app.get("/")
@@ -109,6 +122,33 @@ async def upload_receipt(
     except Exception as e:
         return {"success": False, "reply": f"⚠️ Receipt error: {str(e)}"}
 
+# ── Add Transaction manually (protected) ──────────────────────────────────────
+@app.post("/transaction")
+async def add_transaction(body: TransactionRequest, _: None = Depends(verify_pin)):
+    """Manually add a spending row directly to Sheet1, bypassing AI parsing."""
+    if body.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than 0")
+
+    category  = body.category if body.category in VALID_CATEGORIES else "Other"
+    timestamp = insert_spending(
+        sheet,
+        chat_id  = body.chat_id,
+        amount   = body.amount,
+        category = category,
+        place    = body.place.strip() or "Unknown",
+        note     = body.note.strip() or "",
+    )
+    return {
+        "ok": True,
+        "transaction": {
+            "timestamp": timestamp,
+            "amount":    body.amount,
+            "category":  category,
+            "place":     body.place.strip() or "Unknown",
+            "note":      body.note.strip() or "",
+        }
+    }
+
 # ── Delete Transaction (protected) ────────────────────────────────────────────
 @app.delete("/transaction")
 async def remove_transaction(
@@ -116,10 +156,9 @@ async def remove_transaction(
     timestamp: str = Query(...),
     _: None = Depends(verify_pin),
 ):
-    """Delete a single spending row from Sheet1 matched by chat_id + timestamp."""
     deleted = delete_transaction(sheet, chat_id=chat_id, timestamp=timestamp)
     if deleted:
-        return {"ok": True, "message": "Transaction deleted"}
+        return {"ok": True}
     raise HTTPException(status_code=404, detail="Transaction not found")
 
 # ── Config GET (protected) ────────────────────────────────────────────────────
@@ -129,11 +168,7 @@ async def get_config(chat_id: str, _: None = Depends(verify_pin)):
 
 # ── Config POST (protected) ───────────────────────────────────────────────────
 @app.post("/config")
-async def save_config(
-    chat_id: str,
-    body: ConfigRequest,
-    _: None = Depends(verify_pin),
-):
+async def save_config(chat_id: str, body: ConfigRequest, _: None = Depends(verify_pin)):
     save_user_config(
         config_sheet,
         chat_id     = chat_id,
@@ -152,6 +187,7 @@ async def get_dashboard(chat_id: str, _: None = Depends(verify_pin)):
     this_month       = now.strftime("%Y-%m")
     last_month       = (now.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
     this_week_start  = today - timedelta(days=today.weekday())
+    days_in_month    = calendar.monthrange(now.year, now.month)[1]
 
     records = sheet.get_all_records()
     rows = []
@@ -169,14 +205,22 @@ async def get_dashboard(chat_id: str, _: None = Depends(verify_pin)):
             "month_label": ts.strftime("%B %Y"),
             "amount":      float(row.get("amount", 0)),
             "category":    row.get("category", "Other"),
-            "place":       row.get("place", ""),
-            "note":        row.get("note", ""),
+            "place":       row.get("place", "") or "",
+            "note":        row.get("note", "") or "",
+            "day_of_week": ts.strftime("%A"),
         })
 
-    if not rows:
-        return {"overview": {}, "months": [], "all_time": {"by_category": {}, "transactions": [], "total": 0}}
+    config        = get_user_config(config_sheet, chat_id)
+    salary        = config.get("salary", 0)
+    commitments   = config.get("commitments", [])
+    total_commits = sum(c["amount"] for c in commitments)
+    disposable    = max(salary - total_commits, 0) if salary > 0 else 0
 
-    def sum_rows(rs):   return sum(r["amount"] for r in rs)
+    if not rows:
+        empty_insights = _compute_insights([], salary, disposable, days_in_month, 0, 0)
+        return {"overview": {}, "months": [], "all_time": {"by_category": {}, "transactions": [], "total": 0}, "insights": empty_insights}
+
+    def sum_rows(rs):   return round(sum(r["amount"] for r in rs), 2)
     def by_cat(rs):
         d = defaultdict(float)
         for r in rs:
@@ -235,9 +279,106 @@ async def get_dashboard(chat_id: str, _: None = Depends(verify_pin)):
         "transactions": to_tx(rows),
     }
 
-    return {"overview": overview, "months": months_out, "all_time": all_time}
+    insights = _compute_insights(rows, salary, disposable, days_in_month, days_so_far, spend_this)
+    return {"overview": overview, "months": months_out, "all_time": all_time, "insights": insights}
+
+
+# ── Insight computation ───────────────────────────────────────────────────────
+
+def _compute_insights(rows, salary, disposable, days_in_month, days_so_far, spend_this):
+    DOW = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+    heatmap = {d: 0.0 for d in DOW}
+    if rows and days_so_far > 0:
+        now = datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
+        this_month_str = now.strftime("%Y-%m")
+        for r in rows:
+            if r.get("month") == this_month_str:
+                heatmap[r["day_of_week"]] = round(heatmap[r["day_of_week"]] + r["amount"], 2)
+
+    days_remaining = max(days_in_month - days_so_far, 1)
+    current_daily  = round(spend_this / days_so_far, 2) if days_so_far > 0 else 0
+
+    if disposable > 0:
+        target_daily = round(disposable / days_in_month, 2)
+        ratio        = current_daily / target_daily if target_daily > 0 else 0
+        if ratio <= 0.85:
+            pace = {"status": "under",    "headline": "You're spending slower than expected.", "sub": "Great.",                                          "current": current_daily, "target": target_daily, "adjust_by": None}
+        elif ratio <= 1.15:
+            pace = {"status": "on_track", "headline": "You're right on track.",               "sub": "Keep it up.",                                     "current": current_daily, "target": target_daily, "adjust_by": None}
+        else:
+            overshoot = round(current_daily - target_daily, 2)
+            pace = {"status": "over",     "headline": "You're overspending.",                 "sub": f"Reduce by RM{overshoot}/day to stay within budget.", "current": current_daily, "target": target_daily, "adjust_by": overshoot}
+    else:
+        pace = {"status": "no_config", "headline": "Set your salary in Configure for pace tracking.", "sub": "", "current": current_daily, "target": 0, "adjust_by": None}
+
+    if disposable > 0 and days_remaining > 0:
+        budget_remaining = disposable - spend_this
+        daily_safe       = round(budget_remaining / days_remaining, 2)
+        daily_safe_spend = {"has_config": True, "amount": max(daily_safe, 0), "budget_remaining": round(budget_remaining, 2), "days_remaining": days_remaining, "disposable": disposable}
+    else:
+        daily_safe_spend = {"has_config": False}
+
+    if disposable > 0 and days_so_far > 0:
+        projected_spend   = round((spend_this / days_so_far) * days_in_month, 2)
+        projected_savings = round(disposable - projected_spend, 2)
+        savings_projection = {"has_config": True, "projected_spend": projected_spend, "projected_savings": projected_savings, "disposable": disposable}
+    else:
+        savings_projection = {"has_config": False}
+
+    anomalies = _detect_anomalies(rows)
+    return {"heatmap": heatmap, "pace": pace, "daily_safe_spend": daily_safe_spend, "savings": savings_projection, "anomalies": anomalies}
+
+
+def _detect_anomalies(rows, recent_days=14):
+    if not rows: return []
+    try:
+        today  = max(r["date"] for r in rows)
+        cutoff = today - timedelta(days=recent_days)
+        recent = [r for r in rows if r["date"] >= cutoff]
+        seen, found = set(), []
+        for tx in sorted(recent, key=lambda x: x["timestamp"], reverse=True):
+            key      = tx["timestamp"]
+            if key in seen: continue
+            place    = (tx.get("place") or "").strip()
+            category = tx.get("category", "Other")
+            amount   = tx["amount"]
+            tx_date  = tx["date"]
+            day_name = tx["day_of_week"]
+
+            if place and place.lower() != "unknown":
+                same_place = [r for r in rows if (r.get("place") or "").strip() == place and r["timestamp"] != key]
+                if len(same_place) >= 3:
+                    avg = sum(r["amount"] for r in same_place) / len(same_place)
+                    if amount > avg * 2:
+                        mult = round(amount / avg, 1)
+                        found.append({"timestamp": key, "place": place, "category": category, "amount": amount, "description": f"You usually spend RM{avg:.0f} at {place}. This visit was RM{amount:.0f} — {mult}x higher than usual."})
+                        seen.add(key); continue
+
+            same_dow = [r for r in rows if r["day_of_week"] == day_name and r.get("category") == category and r["timestamp"] != key]
+            if len(same_dow) >= 4:
+                avg = sum(r["amount"] for r in same_dow) / len(same_dow)
+                if amount > avg * 2.5:
+                    mult = round(amount / avg, 1)
+                    found.append({"timestamp": key, "place": place, "category": category, "amount": amount, "description": f"This is {mult}x higher than your average {day_name} {category.lower()} spend of RM{avg:.0f}."})
+                    seen.add(key); continue
+
+            if place and place.lower() != "unknown":
+                place_history = [r for r in rows if (r.get("place") or "").strip() == place and r["timestamp"] != key]
+                if len(place_history) >= 2:
+                    last_visit = max(r["date"] for r in place_history)
+                    days_since = (tx_date - last_visit).days
+                    if days_since >= 45:
+                        found.append({"timestamp": key, "place": place, "category": category, "amount": amount, "description": f"You haven't been to {place} in {days_since} days."})
+                        seen.add(key); continue
+
+        return found[:5]
+    except Exception:
+        return []
+
 
 # ── Text processing ───────────────────────────────────────────────────────────
+
 async def _process_text(text: str, chat_id) -> str:
     try:
         parsed = await parse_message(text)
@@ -245,32 +386,42 @@ async def _process_text(text: str, chat_id) -> str:
 
         if parsed.get("is_spending") and intent == "log":
             timestamp = insert_spending(
-                sheet,
-                chat_id  = chat_id,
-                amount   = parsed["amount"],
-                category = parsed["category"],
-                place    = parsed.get("place") or "Unknown",
-                note     = parsed.get("note") or "",
+                sheet, chat_id=chat_id, amount=parsed["amount"],
+                category=parsed["category"], place=parsed.get("place") or "Unknown", note=parsed.get("note") or "",
             )
             return format_log_reply(parsed, timestamp)
 
-        elif intent == "summary_today":
-            return format_summary(query_summary(sheet, chat_id, "today"))
-        elif intent == "summary_week":
-            return format_summary(query_summary(sheet, chat_id, "week"))
-        elif intent == "summary_month":
-            return format_summary(query_summary(sheet, chat_id, "month"))
+        elif intent == "summary_today":  return format_summary(query_summary(sheet, chat_id, "today"))
+        elif intent == "summary_week":   return format_summary(query_summary(sheet, chat_id, "week"))
+        elif intent == "summary_month":  return format_summary(query_summary(sheet, chat_id, "month"))
 
         elif intent == "advice":
             try:
-                context = get_financial_context(sheet, chat_id)
+                context     = get_financial_context(sheet, chat_id)
+                config      = get_user_config(config_sheet, chat_id)
+                salary      = config.get("salary", 0)
+                commitments = config.get("commitments", [])
+                if salary > 0:
+                    now_my        = datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
+                    total_commits = sum(c["amount"] for c in commitments)
+                    disposable    = max(salary - total_commits, 0)
+                    spend_this    = context.get("spend_this_month", 0)
+                    days_so_far   = max((now_my.date() - now_my.date().replace(day=1)).days + 1, 1)
+                    days_in_month = calendar.monthrange(now_my.year, now_my.month)[1]
+                    proj_spend    = round((spend_this / days_so_far) * days_in_month, 2) if days_so_far > 0 else 0
+                    context.update({
+                        "monthly_salary": salary, "total_commitments": total_commits,
+                        "commitments_detail": commitments, "disposable_income": disposable,
+                        "budget_remaining_this_month": round(disposable - spend_this, 2),
+                        "days_left_in_month": days_in_month - days_so_far,
+                        "projected_savings_this_month": round(disposable - proj_spend, 2),
+                    })
                 return await get_advice(question=text, context=context)
             except Exception as e:
                 return f"⚠️ Couldn't generate advice: {str(e)}"
 
         elif intent == "help":
             return HELP_TEXT
-
         else:
             return "🤔 I didn't catch that. Try: rm25 lunch mcdonalds or type help"
 

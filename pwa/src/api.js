@@ -46,6 +46,18 @@ export async function uploadReceipt(file, chatId) {
   return res.json()
 }
 
+// ── Add transaction (manual key in) ──────────────────────────────────────────
+export async function addTransaction(chatId, { amount, category, place, note }) {
+  const res = await fetch(`${API_URL}/transaction`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ chat_id: chatId, amount, category, place, note }),
+  })
+  if (res.status === 401) throw new Error('UNAUTHORIZED')
+  if (!res.ok) throw new Error(`API error ${res.status}`)
+  return res.json()  // { ok, transaction: { timestamp, amount, category, place, note } }
+}
+
 // ── Delete transaction ────────────────────────────────────────────────────────
 export async function deleteTransaction(chatId, timestamp) {
   const params = new URLSearchParams({ chat_id: chatId, timestamp })
