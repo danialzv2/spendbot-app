@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { fetchDashboard, deleteTransaction, addTransaction } from '../api'
-import dashboardImg from '../components/dashboard_image.png'
+import dashboardHeaderImg from '../components/dashboard_header.png'
 import deleteImg    from '../components/delete_button_image.png'
 
 const CAT_EMOJI = {
@@ -527,10 +527,7 @@ export default function DashboardPage({ chatId, onUnauth }) {
         display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center',
       }}>
         <div />
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <img src={dashboardImg} alt="" style={{ height: 20, objectFit: 'contain', filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
-          <span style={{ fontWeight: 700, fontSize: '0.95rem', letterSpacing: '-0.2px' }}>Dashboard</span>
-        </div>
+        <img src={dashboardHeaderImg} alt="Dashboard" style={{ height: 28, objectFit: 'contain' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
           {lastUpdated && (
             <span style={{ fontFamily: 'var(--mono)', fontSize: '0.58rem', color: 'var(--text-muted)' }}>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getConfig, saveConfig } from '../api'
-import configureImg from '../components/configure_image.png'
+import configureHeaderImg from '../components/configure_header.png'
 
 export default function ConfigPage({ chatId, onUnauth }) {
   const [salary, setSalary]           = useState('')
@@ -101,10 +101,7 @@ export default function ConfigPage({ chatId, onUnauth }) {
         display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center',
       }}>
         <div />
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <img src={configureImg} alt="" style={{ height: 20, objectFit: 'contain', filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
-          <span style={{ fontWeight: 700, fontSize: '0.95rem', letterSpacing: '-0.2px' }}>Configure</span>
-        </div>
+        <img src={configureHeaderImg} alt="Configure" style={{ height: 28, objectFit: 'contain' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
           {dirty && (
             <span style={{ fontFamily: 'var(--mono)', fontSize: '0.58rem', color: 'var(--warning)' }}>unsaved</span>
