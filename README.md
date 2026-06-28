@@ -41,7 +41,7 @@ Everything runs on free tiers. Total cost: RM 0 per month.
 
 - **Frontend** — React PWA, hosted on Vercel
 - **Backend** — FastAPI (Python), hosted on Google Cloud Run
-- **AI** — Google Gemini 2.5 Flash
+- **AI** — Google Gemini 3.1 Flash Lite
 - **Database** — Google Sheets
 - **Receipt scanning** — Gemini Vision
 
