@@ -10,7 +10,6 @@ _SCOPES = [
 ]
 
 def _get_client():
-    """Authenticate and return a gspread client."""
     import re as _re
     creds_raw = GSHEET_CREDS
 
@@ -31,7 +30,6 @@ def _get_client():
 # ── Sheet 1 — Spending ────────────────────────────────────────────────────────
 
 def init_sheet():
-    """Authenticate and return Sheet1 (spending log), creating headers if needed."""
     client = _get_client()
     sheet  = client.open(GSHEET_NAME).sheet1
     if not sheet.row_values(1):
@@ -43,7 +41,6 @@ def init_sheet():
 
 
 def insert_spending(sheet, chat_id, amount, category, place, note) -> str:
-    """Append a spending row. Returns the timestamp string."""
     now_my = datetime.now(MY_TZ).strftime("%Y-%m-%d %H:%M:%S")
     sheet.append_row(
         [now_my, str(chat_id), amount, category, place, note],
@@ -53,25 +50,43 @@ def insert_spending(sheet, chat_id, amount, category, place, note) -> str:
 
 
 def delete_transaction(sheet, chat_id: str, timestamp: str) -> bool:
-    """Delete a transaction row matching chat_id + timestamp.
-    
-    Sheet1 columns: timestamp(0) | chat_id(1) | amount(2) | category(3) | place(4) | note(5)
-    Returns True if a row was found and deleted, False otherwise.
-    """
-    all_values = sheet.get_all_values()  # includes header row
-
-    for i, row in enumerate(all_values[1:], start=2):  # skip header, 1-based index
-        row_timestamp = str(row[0]).strip()
-        row_chat_id   = str(row[1]).strip()
-        if row_timestamp == str(timestamp).strip() and row_chat_id == str(chat_id).strip():
+    """Delete a row matching chat_id + timestamp. Returns True if deleted."""
+    all_values = sheet.get_all_values()
+    for i, row in enumerate(all_values[1:], start=2):
+        if str(row[0]).strip() == str(timestamp).strip() and str(row[1]).strip() == str(chat_id).strip():
             sheet.delete_rows(i)
             return True
+    return False
 
-    return False  # no matching row found
+
+def update_transaction(
+    sheet,
+    chat_id:   str,
+    timestamp: str,
+    amount:    float,
+    category:  str,
+    place:     str,
+    note:      str,
+) -> bool:
+    """Update amount/category/place/note for a row matching chat_id + timestamp.
+
+    Sheet1 columns: timestamp(A) | chat_id(B) | amount(C) | category(D) | place(E) | note(F)
+    Returns True if the row was found and updated.
+    """
+    all_values = sheet.get_all_values()
+    for i, row in enumerate(all_values[1:], start=2):
+        if str(row[0]).strip() == str(timestamp).strip() and str(row[1]).strip() == str(chat_id).strip():
+            # Update columns C–F in a single API call
+            sheet.update(
+                f"C{i}:F{i}",
+                [[amount, category, place or "Unknown", note or ""]],
+                value_input_option="USER_ENTERED",
+            )
+            return True
+    return False
 
 
 def query_summary(sheet, chat_id: int, period: str = "month") -> dict:
-    """Return spending breakdown for today / week / this calendar month."""
     records = sheet.get_all_records()
     now_my  = datetime.now(MY_TZ)
 
@@ -95,7 +110,6 @@ def query_summary(sheet, chat_id: int, period: str = "month") -> dict:
             continue
         if ts_my < cutoff:
             continue
-
         cat = row.get("category", "Other")
         amt = float(row.get("amount", 0))
         breakdown[cat] = breakdown.get(cat, 0.0) + amt
@@ -106,7 +120,6 @@ def query_summary(sheet, chat_id: int, period: str = "month") -> dict:
 
 
 def get_financial_context(sheet, chat_id: int) -> dict:
-    """Build a rich spending context dict for the AI advisor."""
     records  = sheet.get_all_records()
     now_my   = datetime.now(MY_TZ)
     today    = now_my.date()
@@ -180,30 +193,22 @@ def get_financial_context(sheet, chat_id: int) -> dict:
 # ── Sheet 2 — Config ──────────────────────────────────────────────────────────
 
 def init_config_sheet():
-    """Return Sheet2 (config), creating it if it doesn't exist."""
     client      = _get_client()
     spreadsheet = client.open(GSHEET_NAME)
     worksheets  = spreadsheet.worksheets()
-
     if len(worksheets) >= 2:
         config_sheet = worksheets[1]
     else:
         config_sheet = spreadsheet.add_worksheet(title="Config", rows=200, cols=4)
-
     if not config_sheet.row_values(1):
-        config_sheet.append_row(
-            ["chat_id", "type", "label", "amount"],
-            value_input_option="USER_ENTERED"
-        )
+        config_sheet.append_row(["chat_id", "type", "label", "amount"], value_input_option="USER_ENTERED")
     return config_sheet
 
 
 def get_user_config(config_sheet, chat_id: str) -> dict:
-    """Read salary and commitments for a given chat_id from Sheet2."""
     records     = config_sheet.get_all_records()
     salary      = 0.0
     commitments = []
-
     for row in records:
         if str(row.get("chat_id")) != str(chat_id):
             continue
@@ -211,31 +216,15 @@ def get_user_config(config_sheet, chat_id: str) -> dict:
         if row_type == "salary":
             salary = float(row.get("amount", 0) or 0)
         elif row_type == "commitment":
-            commitments.append({
-                "label":  str(row.get("label", "")),
-                "amount": float(row.get("amount", 0) or 0),
-            })
-
+            commitments.append({"label": str(row.get("label", "")), "amount": float(row.get("amount", 0) or 0)})
     return {"salary": salary, "commitments": commitments}
 
 
 def save_user_config(config_sheet, chat_id: str, salary: float, commitments: list) -> None:
-    """Overwrite all config rows for a given chat_id in Sheet2."""
     all_values    = config_sheet.get_all_values()
-    rows_to_delete = [
-        i + 2
-        for i, row in enumerate(all_values[1:])
-        if str(row[0]) == str(chat_id)
-    ]
+    rows_to_delete = [i + 2 for i, row in enumerate(all_values[1:]) if str(row[0]) == str(chat_id)]
     for row_idx in reversed(rows_to_delete):
         config_sheet.delete_rows(row_idx)
-
-    config_sheet.append_row(
-        [str(chat_id), "salary", "Monthly Salary", salary],
-        value_input_option="USER_ENTERED"
-    )
+    config_sheet.append_row([str(chat_id), "salary", "Monthly Salary", salary], value_input_option="USER_ENTERED")
     for c in commitments:
-        config_sheet.append_row(
-            [str(chat_id), "commitment", c["label"], c["amount"]],
-            value_input_option="USER_ENTERED"
-        )
+        config_sheet.append_row([str(chat_id), "commitment", c["label"], c["amount"]], value_input_option="USER_ENTERED")

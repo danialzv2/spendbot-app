@@ -83,21 +83,18 @@ export default function ChatPage({ chatId, onUnauth }) {
       <div style={{
         padding: '0.85rem 1.1rem',
         borderBottom: '1px solid rgba(255,255,255,0.04)',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
+        display: 'flex', justifyContent: 'center', alignItems: 'center',
         background: 'rgba(8,8,8,0.9)',
         backdropFilter: 'blur(20px)',
       }}>
-        <img
-          src={logoImg}
-          alt="SpendBot"
-          style={{ height: 36, objectFit: 'contain' }}
-        />
+        <img src={logoImg} alt="SpendBot" style={{ height: 36, objectFit: 'contain' }} />
       </div>
 
       {/* ── Messages ── */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      <div style={{
+        flex: 1, overflowY: 'auto', padding: '1rem',
+        display: 'flex', flexDirection: 'column', gap: '0.75rem',
+      }}>
         {messages.map((m, i) => (
           <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
             <div style={{ maxWidth: '82%', display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start', gap: '0.3rem' }}>
@@ -119,6 +116,7 @@ export default function ChatPage({ chatId, onUnauth }) {
           </div>
         ))}
 
+        {/* Typing indicator */}
         {loading && (
           <div style={{ display: 'flex' }}>
             <div style={{
@@ -189,7 +187,8 @@ export default function ChatPage({ chatId, onUnauth }) {
           style={{
             background: input.trim() && !loading ? 'var(--accent)' : 'rgba(255,255,255,0.04)',
             border: 'none', borderRadius: 12, padding: '0.7rem 1rem',
-            fontWeight: 800, color: '#0a0a0a', cursor: input.trim() && !loading ? 'pointer' : 'default',
+            fontWeight: 800, color: '#0a0a0a',
+            cursor: input.trim() && !loading ? 'pointer' : 'default',
             fontSize: '1.1rem', transition: 'background 0.15s', flexShrink: 0,
           }}
         >
