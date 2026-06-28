@@ -25,7 +25,8 @@ export default function ChatPage({ chatId, onUnauth }) {
   const [loading, setLoading]     = useState(false)
   const bottomRef                 = useRef(null)
   const inputRef                  = useRef(null)
-  const fileInputRef              = useRef(null)
+  const cameraInputRef            = useRef(null)  // opens camera directly
+  const galleryInputRef           = useRef(null)  // opens photo gallery
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -154,20 +155,42 @@ export default function ChatPage({ chatId, onUnauth }) {
         display: 'flex', gap: '0.5rem', alignItems: 'center',
         background: 'rgba(8,8,8,0.9)',
       }}>
-        <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleReceiptFile} style={{ display: 'none' }} />
 
+        {/* Hidden inputs */}
+        <input ref={cameraInputRef}  type="file" accept="image/*" capture="environment" onChange={handleReceiptFile} style={{ display: 'none' }} />
+        <input ref={galleryInputRef} type="file" accept="image/*" onChange={handleReceiptFile} style={{ display: 'none' }} />
+
+        {/* Camera button */}
         <button
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => cameraInputRef.current?.click()}
           disabled={loading}
+          title="Take photo"
           style={{
             background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)',
-            borderRadius: 12, padding: '0.7rem 0.8rem', fontSize: '1.1rem',
-            cursor: 'pointer', color: loading ? 'var(--text-muted)' : '#888', flexShrink: 0,
+            borderRadius: 12, padding: '0.7rem 0.75rem', fontSize: '1.1rem',
+            cursor: loading ? 'default' : 'pointer',
+            color: loading ? 'var(--text-muted)' : '#888', flexShrink: 0,
           }}
         >
           📷
         </button>
 
+        {/* Gallery button */}
+        <button
+          onClick={() => galleryInputRef.current?.click()}
+          disabled={loading}
+          title="Choose from gallery"
+          style={{
+            background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)',
+            borderRadius: 12, padding: '0.7rem 0.75rem', fontSize: '1.1rem',
+            cursor: loading ? 'default' : 'pointer',
+            color: loading ? 'var(--text-muted)' : '#888', flexShrink: 0,
+          }}
+        >
+          🖼️
+        </button>
+
+        {/* Text input */}
         <input
           ref={inputRef}
           value={input}
@@ -181,6 +204,7 @@ export default function ChatPage({ chatId, onUnauth }) {
           }}
         />
 
+        {/* Send button */}
         <button
           onClick={() => send()}
           disabled={loading || !input.trim()}
