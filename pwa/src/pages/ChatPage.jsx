@@ -19,14 +19,13 @@ const QUICK_REPLIES = [
 
 export default function ChatPage({ chatId, onUnauth }) {
   const [messages, setMessages]   = useState([
-    { role: 'bot', text: "Hey! 👋 Log spending, check summaries, or ask for financial advice.\n\nTry: *rm25 lunch mcdonalds*\nOr tap the camera to scan a receipt!" },
+    { role: 'bot', text: "Hey! 👋 Log spending, check summaries, or ask for financial advice.\n\nTry: *rm25 lunch mcdonalds*\nOr tap + to scan a receipt!" },
   ])
   const [input, setInput]         = useState('')
   const [loading, setLoading]     = useState(false)
   const bottomRef                 = useRef(null)
   const inputRef                  = useRef(null)
-  const cameraInputRef            = useRef(null)  // opens camera directly
-  const galleryInputRef           = useRef(null)  // opens photo gallery
+  const fileInputRef              = useRef(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -80,22 +79,18 @@ export default function ChatPage({ chatId, onUnauth }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
-      {/* ── Header — logo only, centered ── */}
+      {/* ── Header ── */}
       <div style={{
         padding: '0.85rem 1.1rem',
         borderBottom: '1px solid rgba(255,255,255,0.04)',
         display: 'flex', justifyContent: 'center', alignItems: 'center',
-        background: 'rgba(8,8,8,0.9)',
-        backdropFilter: 'blur(20px)',
+        background: 'rgba(8,8,8,0.9)', backdropFilter: 'blur(20px)',
       }}>
         <img src={logoImg} alt="SpendBot" style={{ height: 36, objectFit: 'contain' }} />
       </div>
 
       {/* ── Messages ── */}
-      <div style={{
-        flex: 1, overflowY: 'auto', padding: '1rem',
-        display: 'flex', flexDirection: 'column', gap: '0.75rem',
-      }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         {messages.map((m, i) => (
           <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
             <div style={{ maxWidth: '82%', display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start', gap: '0.3rem' }}>
@@ -155,39 +150,30 @@ export default function ChatPage({ chatId, onUnauth }) {
         display: 'flex', gap: '0.5rem', alignItems: 'center',
         background: 'rgba(8,8,8,0.9)',
       }}>
+        {/* Hidden file input — no capture so iOS shows "Take Photo or Video" + "Choose from Library" */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleReceiptFile}
+          style={{ display: 'none' }}
+        />
 
-        {/* Hidden inputs */}
-        <input ref={cameraInputRef}  type="file" accept="image/*" capture="environment" onChange={handleReceiptFile} style={{ display: 'none' }} />
-        <input ref={galleryInputRef} type="file" accept="image/*" onChange={handleReceiptFile} style={{ display: 'none' }} />
-
-        {/* Camera button */}
+        {/* + button */}
         <button
-          onClick={() => cameraInputRef.current?.click()}
+          onClick={() => fileInputRef.current?.click()}
           disabled={loading}
-          title="Take photo"
+          title="Scan receipt"
           style={{
             background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)',
-            borderRadius: 12, padding: '0.7rem 0.75rem', fontSize: '1.1rem',
+            borderRadius: 12, padding: '0.7rem 0.85rem',
+            fontSize: '1.2rem', fontWeight: 300, lineHeight: 1,
             cursor: loading ? 'default' : 'pointer',
-            color: loading ? 'var(--text-muted)' : '#888', flexShrink: 0,
+            color: loading ? 'var(--text-muted)' : 'var(--text-secondary)',
+            flexShrink: 0, transition: 'color 0.15s',
           }}
         >
-          📷
-        </button>
-
-        {/* Gallery button */}
-        <button
-          onClick={() => galleryInputRef.current?.click()}
-          disabled={loading}
-          title="Choose from gallery"
-          style={{
-            background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)',
-            borderRadius: 12, padding: '0.7rem 0.75rem', fontSize: '1.1rem',
-            cursor: loading ? 'default' : 'pointer',
-            color: loading ? 'var(--text-muted)' : '#888', flexShrink: 0,
-          }}
-        >
-          🖼️
+          +
         </button>
 
         {/* Text input */}
